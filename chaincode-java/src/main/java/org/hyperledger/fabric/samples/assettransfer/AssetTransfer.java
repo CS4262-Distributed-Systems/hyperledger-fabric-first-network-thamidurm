@@ -7,7 +7,6 @@ package org.hyperledger.fabric.samples.assettransfer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.hyperledger.fabric.contract.Context;
@@ -51,7 +50,7 @@ public final class AssetTransfer implements ContractInterface {
         DUPLICATE_ASSET_ID_GENERATION_FAILED
     }
 
-    public AssetTransfer(Supplier<String> randomStringGenerator) {
+    public AssetTransfer(final Supplier<String> randomStringGenerator) {
         this.randomStringGenerator = randomStringGenerator;
     }
 
@@ -267,8 +266,8 @@ public final class AssetTransfer implements ContractInterface {
                 return DuplicateAssetHelper(ctx, asset, newOwner, attempt + 1);
             } else {
                 // This case should be very unlikely
-                String errorMessage = String.format("Generating a unique id for duplicate asset failed in all %d" +
-                        "attempts.", MAX_DUPLICATE_ATTEMPTS);
+                String errorMessage = String.format("Generating a unique id for duplicate asset failed in all %d"
+                        + "attempts.", MAX_DUPLICATE_ATTEMPTS);
                 System.out.println(errorMessage);
                 throw new ChaincodeException(errorMessage, AssetTransferErrors.DUPLICATE_ASSET_ID_GENERATION_FAILED.toString());
             }
