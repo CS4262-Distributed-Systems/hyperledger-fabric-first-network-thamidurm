@@ -11,10 +11,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.UUID;
 
 import org.hyperledger.fabric.contract.Context;
 import org.hyperledger.fabric.shim.ChaincodeException;
@@ -324,66 +326,45 @@ public final class AssetTransferTest {
 
         @Test
         public void whenAssetExists() {
-            String random = "random";
-            AssetTransfer contract = new AssetTransfer(() -> random);
+            String duplicateId = String.format("asset1_%s",
+                    UUID.nameUUIDFromBytes(("0" + Instant.MIN).getBytes(StandardCharsets.UTF_8)));
+            AssetTransfer contract = new AssetTransfer();
             Context ctx = mock(Context.class);
             ChaincodeStub stub = mock(ChaincodeStub.class);
             when(ctx.getStub()).thenReturn(stub);
+            when(stub.getTxTimestamp()).thenReturn(Instant.MIN);
+            when(stub.getTxId()).thenReturn("0");
             when(stub.getStringState("asset1"))
                     .thenReturn("{ \"assetID\": \"asset1\", \"color\": \"blue\", \"size\": 45, \"owner\": \"Arturo\","
                             + " \"appraisedValue\": 60 }");
 
             Asset asset = contract.DuplicateAsset(ctx, "asset1", "Dr Evil");
-            assertThat(asset).isEqualTo(new Asset(String.format("asset1_dup_%s", random), "blue", 45, "Dr Evil", 60));
+            assertThat(asset).isEqualTo(new Asset(duplicateId, "blue", 45, "Dr Evil", 60));
         }
 
         @Test
-        public void whenAssetExistsAndFirstGeneratedIdIsNotUnique() {
-
-            String lastRandom = "random2";
-            AtomicBoolean firstRandomGeneration = new AtomicBoolean(true);
-
-            AssetTransfer contract = new AssetTransfer(() -> {
-                if (firstRandomGeneration.get()) {
-                    firstRandomGeneration.set(false);
-                    return "random";
-                }
-                return "random2";
-            });
-
+        public void whenAssetExistsAndDuplicateIdIsNotUnique() {
+            String duplicateId = String.format("asset1_%s",
+                    UUID.nameUUIDFromBytes(("0" + Instant.MIN).getBytes(StandardCharsets.UTF_8)));
+            System.out.println(duplicateId
+            );
+            AssetTransfer contract = new AssetTransfer();
             Context ctx = mock(Context.class);
             ChaincodeStub stub = mock(ChaincodeStub.class);
             when(ctx.getStub()).thenReturn(stub);
-            when(stub.getStringState("asset1"))
-                    .thenReturn("{ \"assetID\": \"asset1\", \"color\": \"blue\", \"size\": 45, \"owner\": \"Arturo\","
-                            + " \"appraisedValue\": 60 }");
-            when(stub.getStringState("asset1_dup_random"))
-                    .thenReturn("{ \"assetID\": \"asset1_dup_random\", \"color\": \"blue\", \"size\": 45, \"owner\": "
-                            + "\"Arturo\", \"appraisedValue\": 60 }");
-
-            Asset asset = contract.DuplicateAsset(ctx, "asset1", "Dr Evil");
-            assertThat(asset).isEqualTo(new Asset(String.format("asset1_dup_%s", lastRandom), "blue", 45, "Dr Evil", 60));
-        }
-
-        @Test
-        public void whenAssetExistsAndAllGeneratedIdsAreNotUnique() {
-            String random = "random";
-            AssetTransfer contract = new AssetTransfer(() -> random);
-            Context ctx = mock(Context.class);
-            ChaincodeStub stub = mock(ChaincodeStub.class);
-            when(ctx.getStub()).thenReturn(stub);
+            when(stub.getTxTimestamp()).thenReturn(Instant.MIN);
+            when(stub.getTxId()).thenReturn("0");
             when(stub.getStringState("asset1"))
                     .thenReturn("{ \"assetID\": \"asset1\", \"color\": \"blue\", \"size\": 5, \"owner\": \"Tomoko\", "
                             + "\"appraisedValue\": 300 }");
-            when(stub.getStringState("asset1_dup_random"))
-                    .thenReturn("{ \"assetID\": \"asset1_dup_random\", \"color\": \"blue\", \"size\": 5, \"owner\": "
-                            + "\"Tomoko\",\"appraisedValue\": 300 }");
+            when(stub.getStringState(duplicateId))
+                    .thenReturn("{ \"assetID\": \"" + duplicateId + "\", \"color\": \"blue\", \"size\": 5, \"owner\": \"Tomoko\", "
+                            + "\"appraisedValue\": 300 }");
 
             Throwable thrown = catchThrowable(() -> contract.DuplicateAsset(ctx, "asset1", "Siobhán"));
 
             assertThat(thrown).isInstanceOf(ChaincodeException.class).hasNoCause()
-                    .hasMessage(String.format("Generating a unique id for duplicate asset failed in all %d"
-                            + "attempts.", AssetTransfer.MAX_DUPLICATE_ATTEMPTS));
+                    .hasMessage("An asset with the generated duplicate id already exists. Try again.");
             assertThat(((ChaincodeException) thrown).getPayload()).isEqualTo("DUPLICATE_ASSET_ID_GENERATION_FAILED"
                     .getBytes());
         }

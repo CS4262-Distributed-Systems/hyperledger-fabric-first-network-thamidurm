@@ -4,10 +4,10 @@
 
 package org.hyperledger.fabric.samples.assettransfer;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Supplier;
 
 import org.hyperledger.fabric.contract.Context;
 import org.hyperledger.fabric.contract.ContractInterface;
@@ -40,9 +40,7 @@ import com.owlike.genson.Genson;
 @Default
 public final class AssetTransfer implements ContractInterface {
 
-    public static final int MAX_DUPLICATE_ATTEMPTS = 5;
     private final Genson genson = new Genson();
-    private final Supplier randomStringGenerator;
 
     private enum AssetTransferErrors {
         ASSET_NOT_FOUND,
@@ -50,12 +48,7 @@ public final class AssetTransfer implements ContractInterface {
         DUPLICATE_ASSET_ID_GENERATION_FAILED
     }
 
-    public AssetTransfer(final Supplier<String> randomStringGenerator) {
-        this.randomStringGenerator = randomStringGenerator;
-    }
-
     public AssetTransfer() {
-        this(() -> UUID.randomUUID().toString());
     }
 
     /**
@@ -249,28 +242,30 @@ public final class AssetTransfer implements ContractInterface {
         return response;
     }
 
+    /**
+     * Attempts to duplicate an asset with the given id and transfer duplicate asset to the given
+     * owner
+     *
+     * @param ctx      the transaction context
+     * @param assetId  the id of the asset to be duplicated
+     * @param newOwner the owner of the duplicate asset
+     * @return the duplicate
+     */
     @Transaction(intent = Transaction.TYPE.SUBMIT)
     public Asset DuplicateAsset(final Context ctx, final String assetId, final String newOwner) {
         Asset asset = this.ReadAsset(ctx, assetId);
-        int attempt = 1;
-        return this.DuplicateAssetHelper(ctx, asset, newOwner, attempt);
-    }
 
-    private Asset DuplicateAssetHelper(final Context ctx, final Asset asset, final String newOwner, final int attempt) {
         try {
-            return this.CreateAsset(ctx, asset.getAssetID() + "_dup_" + randomStringGenerator.get(),
-                    asset.getColor(), asset.getSize(), newOwner, asset.getAppraisedValue());
+            return this.CreateAsset(ctx, asset.getAssetID() + "_"
+                            + UUID.nameUUIDFromBytes((ctx.getStub().getTxId() + ctx.getStub().getTxTimestamp())
+                                    .getBytes(StandardCharsets.UTF_8)), asset.getColor(), asset.getSize(), newOwner,
+                    asset.getAppraisedValue());
         } catch (ChaincodeException ex) {
-            // If asset with generated id already exists (highly unlikely unless manually created)
-            if (attempt < MAX_DUPLICATE_ATTEMPTS) {
-                return DuplicateAssetHelper(ctx, asset, newOwner, attempt + 1);
-            } else {
-                // This case should be very unlikely
-                String errorMessage = String.format("Generating a unique id for duplicate asset failed in all %d"
-                        + "attempts.", MAX_DUPLICATE_ATTEMPTS);
-                System.out.println(errorMessage);
-                throw new ChaincodeException(errorMessage, AssetTransferErrors.DUPLICATE_ASSET_ID_GENERATION_FAILED.toString());
-            }
+            String errorMessage = String.format("An asset with the generated duplicate id already exists. "
+                    + "Try again.");
+            System.out.println(errorMessage);
+            throw new ChaincodeException(errorMessage, AssetTransferErrors.DUPLICATE_ASSET_ID_GENERATION_FAILED.toString());
         }
     }
 }
+
